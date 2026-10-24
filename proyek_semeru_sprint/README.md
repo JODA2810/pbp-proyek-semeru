@@ -7,9 +7,8 @@ Nama kelompok: Semeru
 
 | No | Nama | NIM |
 |----|------|-----|
-| 1 | Nama Anggota 1 | 2024001 |
-| 2 | Nama Anggota 2 | 2024002 |
-| 3 | Nama Anggota 3 | 2024003 |
+| 1 | Ivan Sanjaya Tjoe | 223400007 |
+| 2 | Jonathan Surjadjaja | 243401003 |
 
 ## Ringkasan Usulan Proyek v2
 
