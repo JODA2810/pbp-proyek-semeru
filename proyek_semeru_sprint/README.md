@@ -35,11 +35,7 @@ DapurCerdas adalah aplikasi dengan pendekatan mobile-first dan tampilan sederhan
 Dengan aplikasi ini, operasional diharapkan lebih efisien, kesalahan pencatatan berkurang, persediaan lebih akurat, dan pemilik bisa memantau usaha tanpa selalu berada di tempat.
 
 ## Kontrak Lima Unsur
-1. **[Unsur 1]**: isi singkat
-2. **[Unsur 2]**: isi singkat
-3. **[Unsur 3]**: isi singkat
-4. **[Unsur 4]**: isi singkat
-5. **[Unsur 5]**: isi singkat
+
 
 ## Batasan
 - Versi awal fokus pada aplikasi mobile. Tampilan web hanya untuk melihat laporan dan dashboard.
@@ -61,3 +57,6 @@ Dengan aplikasi ini, operasional diharapkan lebih efisien, kesalahan pencatatan 
 | 6 | Dashboard pemilik: penjualan, pengeluaran, dan persediaan | [Unsur 4] |
 | 7 | Laporan stok dan penggunaan bahan per menu (dasar HPP) | [Unsur 4] |
 | 8 | Peran pengguna: pemilik, kasir, dapur/gudang | [Unsur 5] |
+
+## Papan Tugas
+Link papan: https://github.com/users/JODA2810/projects/2/views/1

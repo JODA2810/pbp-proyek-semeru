@@ -61,6 +61,20 @@ class DapurCerdasApp extends StatelessWidget {
   }
 }
 
+// ---------- Layar kosong (skeleton) ----------
+class LayarKosong extends StatelessWidget {
+  final String judul;
+  const LayarKosong(this.judul, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(judul)),
+      body: Center(child: Text('$judul (isi menyusul di sprint 2)')),
+    );
+  }
+}
+
 // ---------- Halaman riwayat ----------
 class HalamanRiwayat extends StatelessWidget {
   final List<Transaksi> riwayat;
@@ -141,6 +155,7 @@ class _HalamanStokState extends State<HalamanStok> {
   final List<Transaksi> riwayat = [];
   int nextId = 4;
   String filter = 'semua';
+  Bahan? dipilih;
 
   Kategori? cariKategori(int? id) {
     for (final k in kategori) {
@@ -267,6 +282,41 @@ class _HalamanStokState extends State<HalamanStok> {
     });
   }
 
+  void hapusBahan(Bahan b) {
+    setState(() {
+      daftarBahan.remove(b);
+      riwayat.removeWhere((t) => t.bahanId == b.id);
+      if (dipilih == b) dipilih = null;
+    });
+  }
+
+  Future<bool> tanyaHapus(Bahan b) async {
+    final ya = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus bahan?'),
+        content: Text(
+          'Bahan "${b.nama}" dan riwayat transaksinya akan dihapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    return ya == true;
+  }
+
+  Future<void> konfirmasiHapus(Bahan b) async {
+    if (await tanyaHapus(b) && mounted) hapusBahan(b);
+  }
+
   void formTransaksi(Bahan b) {
     final jml = TextEditingController();
     showDialog(
@@ -298,6 +348,35 @@ class _HalamanStokState extends State<HalamanStok> {
     );
   }
 
+  Widget panelDetail() {
+    final b = dipilih;
+    if (b == null || !daftarBahan.contains(b)) {
+      return const Center(child: Text('Pilih bahan di sebelah kiri'));
+    }
+    final k = cariKategori(b.kategoriId);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(b.nama, style: Theme.of(context).textTheme.headlineSmall),
+          Text(k?.nama ?? 'Tanpa kategori'),
+          const SizedBox(height: 16),
+          Text('Stok: ${fmt(b.jumlah)} ${b.satuan}'),
+          Text('Batas minimum: ${fmt(b.batasMinimum)} ${b.satuan}'),
+          Text(b.menipis ? 'Status: menipis' : 'Status: aman'),
+          if (b.kedaluwarsa != null)
+            Text('Kedaluwarsa: ${b.kedaluwarsa.toString().substring(0, 10)}'),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => formTransaksi(b),
+            child: const Text('Catat stok masuk/keluar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = tampil;
@@ -314,64 +393,116 @@ class _HalamanStokState extends State<HalamanStok> {
           ),
         ],
       ),
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            const DrawerHeader(child: Text('DapurCerdas')),
+            for (final judul in [
+              'Menu & Resep',
+              'Kasir',
+              'Bahan Terbuang',
+              'Laporan',
+            ])
+              ListTile(
+                title: Text(judul),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => LayarKosong(judul)),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: formTambah,
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                for (final f in ['semua', 'menipis', 'kedaluwarsa'])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(f),
-                      selected: filter == f,
-                      onSelected: (_) => setState(() => filter = f),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: data.isEmpty
-                ? const Center(child: Text('Tidak ada bahan'))
-                : ListView.builder(
-                    itemCount: data.length,
-                    itemBuilder: (context, i) {
-                      final b = data[i];
-                      final k = cariKategori(b.kategoriId);
-                      return Dismissible(
-                        key: ValueKey(b.id),
-                        background: Container(color: Colors.red),
-                        onDismissed: (_) => setState(() {
-                          daftarBahan.remove(b);
-                          riwayat.removeWhere((t) => t.bahanId == b.id);
-                        }),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: k?.warna ?? Colors.grey,
-                            child: Text(b.nama[0]),
-                          ),
-                          title: Text(b.nama),
-                          subtitle: Text(k?.nama ?? 'Tanpa kategori'),
-                          trailing: Text(
-                            '${fmt(b.jumlah)} ${b.satuan}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: b.menipis ? Colors.red : null,
-                            ),
-                          ),
-                          onTap: () => formTransaksi(b),
+      body: LayoutBuilder(
+        builder: (context, c) {
+          final lebar = c.maxWidth >= 600;
+          final daftar = Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    for (final f in ['semua', 'menipis', 'kedaluwarsa'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(f),
+                          selected: filter == f,
+                          onSelected: (_) => setState(() => filter = f),
                         ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: data.isEmpty
+                    ? const Center(child: Text('Tidak ada bahan'))
+                    : ListView.builder(
+                        itemCount: data.length,
+                        itemBuilder: (context, i) {
+                          final b = data[i];
+                          final k = cariKategori(b.kategoriId);
+                          return Dismissible(
+                            key: ValueKey(b.id),
+                            background: Container(color: Colors.red),
+                            confirmDismiss: (_) => tanyaHapus(b),
+                            onDismissed: (_) => hapusBahan(b),
+                            child: ListTile(
+                              selected: lebar && dipilih == b,
+                              leading: CircleAvatar(
+                                backgroundColor: k?.warna ?? Colors.grey,
+                                child: Text(b.nama[0]),
+                              ),
+                              title: Text(b.nama),
+                              subtitle: Text(k?.nama ?? 'Tanpa kategori'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${fmt(b.jumlah)} ${b.satuan}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: b.menipis ? Colors.red : null,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Hapus ${b.nama}',
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () => konfirmasiHapus(b),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                if (lebar) {
+                                  setState(() => dipilih = b);
+                                } else {
+                                  formTransaksi(b);
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+
+          if (!lebar) return daftar;
+          return Row(
+            children: [
+              Expanded(flex: 1, child: daftar),
+              const VerticalDivider(width: 1),
+              Expanded(flex: 1, child: panelDetail()),
+            ],
+          );
+        },
       ),
     );
   }
