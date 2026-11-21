@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const DapurCerdasApp());
@@ -34,6 +37,28 @@ class Bahan {
   });
 
   bool get menipis => jumlah <= batasMinimum;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'nama': nama,
+    'satuan': satuan,
+    'jumlah': jumlah,
+    'batasMinimum': batasMinimum,
+    'kedaluwarsa': kedaluwarsa?.toIso8601String(),
+    'kategoriId': kategoriId,
+  };
+
+  factory Bahan.fromJson(Map<String, dynamic> j) => Bahan(
+    id: j['id'] as int,
+    nama: j['nama'] as String,
+    satuan: j['satuan'] as String,
+    jumlah: (j['jumlah'] as num).toDouble(),
+    batasMinimum: (j['batasMinimum'] as num).toDouble(),
+    kedaluwarsa: j['kedaluwarsa'] == null
+        ? null
+        : DateTime.parse(j['kedaluwarsa'] as String),
+    kategoriId: j['kategoriId'] as int?,
+  );
 }
 
 class Transaksi {
@@ -48,6 +73,22 @@ class Transaksi {
     this.jenis,
     this.jumlah,
     this.tanggal,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'bahanId': bahanId,
+    'namaBahan': namaBahan,
+    'jenis': jenis,
+    'jumlah': jumlah,
+    'tanggal': tanggal.toIso8601String(),
+  };
+
+  factory Transaksi.fromJson(Map<String, dynamic> j) => Transaksi(
+    j['bahanId'] as int,
+    j['namaBahan'] as String,
+    j['jenis'] as String,
+    (j['jumlah'] as num).toDouble(),
+    DateTime.parse(j['tanggal'] as String),
   );
 }
 
@@ -124,7 +165,29 @@ class _HalamanStokState extends State<HalamanStok> {
     Kategori(4, 'Kemasan', Color(0xFF1E88E5)),
   ];
 
-  final List<Bahan> daftarBahan = [
+  List<Bahan> daftarBahan = [];
+  List<Transaksi> riwayat = [];
+  int nextId = 4;
+  String filter = 'semua';
+  String cari = '';
+  Bahan? dipilih;
+  bool memuat = true;
+  final TextEditingController cariCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    muat();
+  }
+
+  @override
+  void dispose() {
+    cariCtrl.dispose();
+    super.dispose();
+  }
+
+  // ---------- Penyimpanan lokal ----------
+  List<Bahan> dataContoh() => [
     Bahan(
       id: 1,
       nama: 'Saus tomat',
@@ -152,10 +215,41 @@ class _HalamanStokState extends State<HalamanStok> {
     ),
   ];
 
-  final List<Transaksi> riwayat = [];
-  int nextId = 4;
-  String filter = 'semua';
-  Bahan? dipilih;
+  Future<void> muat() async {
+    final p = await SharedPreferences.getInstance();
+    final b = p.getString('bahan');
+    final r = p.getString('riwayat');
+    final hasilBahan = b == null
+        ? dataContoh()
+        : (jsonDecode(b) as List)
+              .map((e) => Bahan.fromJson(e as Map<String, dynamic>))
+              .toList();
+    final hasilRiwayat = r == null
+        ? <Transaksi>[]
+        : (jsonDecode(r) as List)
+              .map((e) => Transaksi.fromJson(e as Map<String, dynamic>))
+              .toList();
+    if (!mounted) return;
+    setState(() {
+      daftarBahan = hasilBahan;
+      riwayat = hasilRiwayat;
+      nextId = p.getInt('nextId') ?? 4;
+      memuat = false;
+    });
+  }
+
+  Future<void> simpan() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(
+      'bahan',
+      jsonEncode(daftarBahan.map((e) => e.toJson()).toList()),
+    );
+    await p.setString(
+      'riwayat',
+      jsonEncode(riwayat.map((e) => e.toJson()).toList()),
+    );
+    await p.setInt('nextId', nextId);
+  }
 
   Kategori? cariKategori(int? id) {
     for (final k in kategori) {
@@ -164,22 +258,27 @@ class _HalamanStokState extends State<HalamanStok> {
     return null;
   }
 
+  // ---------- Pencarian + filter ----------
   List<Bahan> get tampil {
     final sekarang = DateTime.now();
-    switch (filter) {
-      case 'menipis':
-        return daftarBahan.where((b) => b.menipis).toList();
-      case 'kedaluwarsa':
-        return daftarBahan
-            .where(
-              (b) =>
-                  b.kedaluwarsa != null &&
-                  b.kedaluwarsa!.difference(sekarang).inHours <= 7 * 24,
-            )
-            .toList();
-      default:
-        return daftarBahan;
-    }
+    final kata = cari.trim().toLowerCase();
+    return daftarBahan.where((b) {
+      if (kata.isNotEmpty) {
+        final namaKat = cariKategori(b.kategoriId)?.nama.toLowerCase() ?? '';
+        if (!b.nama.toLowerCase().contains(kata) && !namaKat.contains(kata)) {
+          return false;
+        }
+      }
+      switch (filter) {
+        case 'menipis':
+          return b.menipis;
+        case 'kedaluwarsa':
+          return b.kedaluwarsa != null &&
+              b.kedaluwarsa!.difference(sekarang).inHours <= 7 * 24;
+        default:
+          return true;
+      }
+    }).toList();
   }
 
   Future<void> formTambah() async {
@@ -255,6 +354,7 @@ class _HalamanStokState extends State<HalamanStok> {
                   ),
                 );
               });
+              simpan();
               Navigator.pop(ctx);
             },
             child: const Text('Simpan'),
@@ -280,6 +380,7 @@ class _HalamanStokState extends State<HalamanStok> {
       b.jumlah += jenis == 'masuk' ? jml : -jml;
       riwayat.insert(0, Transaksi(b.id, b.nama, jenis, jml, DateTime.now()));
     });
+    simpan();
   }
 
   void hapusBahan(Bahan b) {
@@ -288,6 +389,7 @@ class _HalamanStokState extends State<HalamanStok> {
       riwayat.removeWhere((t) => t.bahanId == b.id);
       if (dipilih == b) dipilih = null;
     });
+    simpan();
   }
 
   Future<bool> tanyaHapus(Bahan b) async {
@@ -379,6 +481,9 @@ class _HalamanStokState extends State<HalamanStok> {
 
   @override
   Widget build(BuildContext context) {
+    if (memuat) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final data = tampil;
     return Scaffold(
       appBar: AppBar(
@@ -426,24 +531,56 @@ class _HalamanStokState extends State<HalamanStok> {
           final daftar = Column(
             children: [
               Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: TextField(
+                  controller: cariCtrl,
+                  onChanged: (v) => setState(() => cari = v),
+                  decoration: InputDecoration(
+                    hintText: 'Cari bahan atau kategori',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: cari.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Hapus pencarian',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              cariCtrl.clear();
+                              setState(() => cari = '');
+                            },
+                          ),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    for (final f in ['semua', 'menipis', 'kedaluwarsa'])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(f),
-                          selected: filter == f,
-                          onSelected: (_) => setState(() => filter = f),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final f in ['semua', 'menipis', 'kedaluwarsa'])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(f),
+                            selected: filter == f,
+                            onSelected: (_) => setState(() => filter = f),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               Expanded(
                 child: data.isEmpty
-                    ? const Center(child: Text('Tidak ada bahan'))
+                    ? Center(
+                        child: Text(
+                          cari.trim().isEmpty
+                              ? 'Tidak ada bahan'
+                              : 'Tidak ditemukan untuk "$cari"',
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: data.length,
                         itemBuilder: (context, i) {
